@@ -234,6 +234,7 @@ const generateToken = (payload) => {
 //AUTENTIFICACIÓN JWT registro y inicio de sesión
 
 
+//endpoint registro y se genera token
 server.post('/registro' , async (req,res) => {
   const nombre = req.body.nombre;
   const email = req.body.email;
@@ -246,7 +247,7 @@ server.post('/registro' , async (req,res) => {
   let user = {
     nombre: nombre,
     email: email,
-    passwordHash: passwordHash,
+    password: passwordHash,
   };
 
   jwt.sign(user, "secreto", async (err, token)=> {
@@ -265,3 +266,44 @@ server.post('/registro' , async (req,res) => {
   })
 
 });
+
+server.post('/login', async (request, response) => {
+  const body = request.body;
+
+  try {
+    let sql = 'SELECT * FROM usuarios WHERE email = ?';
+    const connection = await getConnection();
+    const [results, fields] = await connection.query(sql, [body.email]);
+    connection.end();
+
+    const user = results[0];
+
+    if (!user || !user.passwordHash) {
+      console.log(user);
+      return response.status(401).json({
+        error: 'Invalid username or password',
+      });
+    }
+
+    // Comparación de contraseñas sin encriptar
+    if (body.password !== user.password) {
+      return response.status(401).json({
+        error: 'Invalid username or password',
+      });
+    }
+
+    const userForToken = {
+      email: user.email,
+      id: user.id,
+      nombre: user.nombre,
+    };
+
+    const token = generateToken(userForToken);
+
+    response.status(200).json({ token, email: user.email, password: user.password });
+  } catch (error) {
+    console.log("Error en la ruta /login:", error);
+    response.status(500).json({ error: 'Unexpected server error' });
+  }
+});
+
