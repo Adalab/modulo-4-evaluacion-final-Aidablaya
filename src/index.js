@@ -1,13 +1,11 @@
-// Servidor Express
-
-// Para probar los ficheros estáticos del fronend, entrar en <http://localhost:4500/>
-// Para probar el API, entrar en <http://localhost:4500/api/items>
 
 // Imports
 
 const express = require("express");
 const cors = require("cors");
 const mysql = require("mysql2/promise");
+const jwt = require('jsonwebtoken'); 
+const bcrypt = require("bcrypt");   
 require('dotenv').config()
 
 
@@ -20,7 +18,7 @@ const server = express();
 
 server.use(cors());
 server.use(express.json({limit: "25mb"}));
-//server.set('view engine', 'ejs');
+
 
 
 
@@ -54,7 +52,7 @@ server.listen(port, () => {
 
 // 1.GET /recetas,  mostrar toda la tabla
 
-server.get("/api/recetas", async (req, res) => {
+server.get("/recetas", async (req, res) => {
   const select= "SELECT * FROM recetas"
   const conn = await getConnection();
 
@@ -65,14 +63,14 @@ server.get("/api/recetas", async (req, res) => {
     res.json(
       {
         info: {
-            count: result.lenght, //número de elementos del listado
+            count: result.lenght, 
         },
-        results: result //listado de recetas
+        results: result 
     }
     );
   } catch (error) {
     res.json (   {
-      success: false, //Puede ser true o false
+      success: false, 
       message:error,
     })
   }
@@ -81,7 +79,7 @@ server.get("/api/recetas", async (req, res) => {
 
 //2. GET/recetas/:id busca la receta por id
 
-server.get("/api/recetas/:id", async (req, res) => {
+server.get("/recetas/:id", async (req, res) => {
 
   const id= req.params.id;
   const select = "SELECT * FROM recetas where id = ?";
@@ -94,16 +92,16 @@ server.get("/api/recetas/:id", async (req, res) => {
     res.json(
       {
         info: {
-            count: result.lenght, //número de elementos del listado
+            count: result.lenght, 
         },
-        results: result //listado de recetas
+        results: result 
     }
     );
   } catch (error) {
     console.error(error);
     
     res.json (   {
-      success: false, //Puede ser true o false
+      success: false, 
       message:error,
     })
   }
@@ -111,7 +109,7 @@ server.get("/api/recetas/:id", async (req, res) => {
 });
 
 //3.añadir nueva receta /receta/:nombre
-server.post("/api/recetas", async (req, res) => {
+server.post("/recetas", async (req, res) => {
 
   const nombre= req.params.nombre;
   const newRecipe = req.body;
@@ -127,13 +125,13 @@ server.post("/api/recetas", async (req, res) => {
     ]);
   conn.end();
   res.json(     {
-    success: true, //Puede ser true o false
-    "id": result.insertId, // id que generó MySQL para la nueva fila
+    success: true, 
+    "id": result.insertId, 
   }
   );
   } catch (error) {
     res.json (   {
-      success: false, //Puede ser true o false
+      success: false, 
       message:"error no se ha podido añadir esta información a su tabla",
     })
   }
@@ -141,9 +139,9 @@ server.post("/api/recetas", async (req, res) => {
 
 ////4. actualizar receta receta/:id
 
-server.put("/api/recetas/:id", async (req, res) => {
+server.put("/recetas/:id", async (req, res) => {
 
-  //const user= req.params.user;
+
   const id = req.params.id;
   
   const newRecipe = req.body;
@@ -172,7 +170,7 @@ server.put("/api/recetas/:id", async (req, res) => {
 }); 
 
 //4.ELIMINAR RECETA recetas/:id
-server.delete("/api/recetas/:id", async (req, res) => {
+server.delete("/recetas/:id", async (req, res) => {
   
   const  id = req.params.id;
 
@@ -194,5 +192,76 @@ server.delete("/api/recetas/:id", async (req, res) => {
       message:error,
     })
   }
+
+});
+
+
+////BONUS
+//GENERAR Y VERIFICAR TOKEN
+
+const generateToken = (payload) => {
+  const token = jwt.sign(payload, 'secreto', { expiresIn: '1h' });
+    return token;
+  };
+  
+  const verifyToken = (token) => {
+    try {
+      const decoded = jwt.verify(token, 'secreto');
+      return decoded;
+    } catch (err) {
+      return { error: "Token inválido" };
+    }
+  };
+
+  const authenticateToken = (req, res, next) => {
+    const token = req.headers['authorization'];
+  
+    if (!token) {
+      return res.status(401).json({ error: 'Token no proporcionado' });
+    }
+  
+    const decoded = verifyToken(token);
+  
+    if (!decoded) {
+      return res.status(401).json({ error: 'Token inválido' });
+    }
+  
+    req.user = decoded;
+    next();
+  };
+  
+  
+//AUTENTIFICACIÓN JWT registro y inicio de sesión
+
+
+server.post('/registro' , async (req,res) => {
+  const nombre = req.body.nombre;
+  const email = req.body.email;
+  const password = req.body.password;
+  
+  
+  const passwordHash = await bcrypt.hash(password, 10);
+
+  let sql = "INSERT INTO usuarios (nombre,email,password) VALUES (?,?,?)";
+  let user = {
+    nombre: nombre,
+    email: email,
+    passwordHash: passwordHash,
+  };
+
+  jwt.sign(user, "secreto", async (err, token)=> {
+    if(err){
+      res.status(400).send({msg : 'Error'})
+   } else {
+    const connection = await getConnection();
+    const [results, fields] = await connection.query(sql,[
+      nombre,
+      email,
+      passwordHash,
+    ]);
+    connection.end();
+    res.json({msg:'success', token: token, id:results.insertId})
+    }
+  })
 
 });
